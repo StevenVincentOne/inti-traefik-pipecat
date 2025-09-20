@@ -1,0 +1,94 @@
+# Inti Pipecat Backend Deployment - Pipecat Branch
+# This configuration addresses Traefik service discovery issues
+# Updated: September 2025
+
+version: '3.9'
+
+networks:
+  unmute-net:
+    external: true
+
+services:
+  # Pipecat Backend Service with Fixed Routing
+  backend:
+    image: intellipedia/inti-pipecat-backend:dev.3
+    environment:
+      - GROQ_API_KEY=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
+      - INTI_GROQ_LLM_MODEL=openai/gpt-oss-20b
+      - INTI_GROQ_STT_MODEL=whisper-large-v3-turbo
+      - INTI_GROQ_TTS_VOICE=Celeste-PlayAI
+      - INTI_LOG_LEVEL=INFO
+    deploy:
+      replicas: 1
+      update_config:
+        delay: 10s
+        parallelism: 1
+        order: start-first
+      labels:
+        # Enable Traefik routing
+        - "traefik.enable=true"
+
+        # Approach 1: Simple host-based routing (try this first)
+        - "traefik.http.routers.backend.rule=Host(\`inti.intellipedia.ai\`)"
+        - "traefik.http.routers.backend.entrypoints=websecure"
+        - "traefik.http.routers.backend.tls=true"
+        - "traefik.http.routers.backend.priority=100"
+
+        # Service reference - try different formats
+        - "traefik.http.services.backend.loadbalancer.server.service=unmute_backend"
+        - "traefik.http.services.backend.loadbalancer.server.port=8000"
+
+        # WebSocket routing (separate router to avoid conflicts)
+        - "traefik.http.routers.ws.rule=Host(\`inti.intellipedia.ai\`) && Path(\`/v1/realtime\`)"
+        - "traefik.http.routers.ws.entrypoints=websecure"
+        - "traefik.http.routers.ws.tls=true"
+        - "traefik.http.routers.ws.priority=110"
+        - "traefik.http.services.ws.loadbalancer.server.service=unmute_backend"
+        - "traefik.http.services.ws.loadbalancer.server.port=8000"
+    networks:
+      - unmute-net
+
+  # Frontend Service (unchanged)
+  frontend:
+    image: intellipedia/inti-frontend:v15.11.23
+    environment:
+      - NEXT_PUBLIC_IN_DOCKER=true
+      - NEXT_PUBLIC_WS_URL=wss://inti.intellipedia.ai/v1/realtime
+      - NEXT_PUBLIC_API_BASE=https://inti.intellipedia.ai/api
+      - NEXT_PUBLIC_BACKEND_URL=https://inti.intellipedia.ai/api
+    deploy:
+      replicas: 1
+      update_config:
+        delay: 10s
+        order: start-first
+      labels:
+        - "traefik.enable=true"
+        - "traefik.http.routers.frontend.rule=Host(\`inti.intellipedia.ai\`) && !PathPrefix(\`/api\`)"
+        - "traefik.http.routers.frontend.entrypoints=websecure"
+        - "traefik.http.routers.frontend.tls=true"
+        - "traefik.http.services.frontend.loadbalancer.server.port=3000"
+        - "traefik.http.routers.frontend.priority=50"
+    networks:
+      - unmute-net
+
+  # Traefik Service with Pipecat-Specific Configuration
+  traefik:
+    image: traefik:v3.3.1
+    command:
+      - "--configFile=/etc/traefik/traefik-pipecat.yml"
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - /root/traefik-static.yml:/etc/traefik/traefik-static.yml:ro
+      - /root/traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
+      - /root/certs:/etc/certs:ro
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    deploy:
+      placement:
+        constraints:
+          - node.role == manager
+      update_config:
+        order: stop-first
+    networks:
+      - unmute-net

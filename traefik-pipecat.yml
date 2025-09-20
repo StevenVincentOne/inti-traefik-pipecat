@@ -1,0 +1,59 @@
+# Inti Traefik - Pipecat-Specific Configuration
+# This configuration addresses service discovery issues with Pipecat backend
+# Updated: September 2025
+
+# Global configuration
+global:
+  checkNewVersion: false
+  sendAnonymousUsage: false
+
+# API and dashboard
+api:
+  dashboard: true
+  insecure: false
+
+# Entrypoints
+entryPoints:
+  web:
+    address: ":80"
+    http:
+      redirections:
+        entrypoint:
+          to: websecure
+          scheme: https
+  websecure:
+    address: ":443"
+
+# Certificate resolvers
+certificatesResolvers:
+  le:
+    acme:
+      email: steve@intellipedia.ai
+      storage: /data/acme.json
+      httpChallenge:
+        entryPoint: web
+
+# Providers
+providers:
+  docker:
+    exposedByDefault: false
+    swarmMode: true
+    network: unmute-net
+    endpoint: "unix:///var/run/docker.sock"
+
+# Logging
+log:
+  level: INFO
+accessLog: {}
+
+# Metrics
+metrics:
+  prometheus:
+    entryPoint: websecure
+
+# Experimental features
+experimental:
+  localPlugins:
+    rewriteBody:
+      moduleName: github.com/traefik/plugin-rewritebody
+

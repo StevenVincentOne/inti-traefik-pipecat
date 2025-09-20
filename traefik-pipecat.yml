@@ -37,8 +37,6 @@ certificatesResolvers:
 providers:
   docker:
     exposedByDefault: false
-    swarmMode: true
-    network: unmute-net
     endpoint: "unix:///var/run/docker.sock"
 
 # Logging
@@ -51,9 +49,4 @@ metrics:
   prometheus:
     entryPoint: websecure
 
-# Experimental features
-experimental:
-  localPlugins:
-    rewriteBody:
-      moduleName: github.com/traefik/plugin-rewritebody
 

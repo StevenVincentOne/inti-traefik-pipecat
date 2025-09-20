@@ -1,5 +1,5 @@
 # Inti Pipecat Backend Deployment - Pipecat Branch
-# This configuration addresses Traefik service discovery issues
+# This configuration uses TLS-ALPN challenge for Let's Encrypt (working)
 # Updated: September 2025
 
 version: '3.9'
@@ -8,10 +8,13 @@ networks:
   unmute-net:
     external: true
 
+volumes:
+  traefik-cert:
+
 services:
   # Pipecat Backend Service with Fixed Routing
   backend:
-    image: intellipedia/inti-pipecat-backend:dev.3
+    image: intellipedia/inti-pipecat-backend:dev.4
     environment:
       - GROQ_API_KEY=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
       - INTI_GROQ_LLM_MODEL=openai/gpt-oss-20b
@@ -28,22 +31,20 @@ services:
         # Enable Traefik routing
         - "traefik.enable=true"
 
-        # Approach 1: Simple host-based routing (try this first)
-        - "traefik.http.routers.backend.rule=Host(\`inti.intellipedia.ai\`)"
+        # API routing - handles /api/v1/health and other API calls
+        - "traefik.http.routers.backend.rule=Host(`inti.intellipedia.ai`) && PathPrefix(`/api`)"
         - "traefik.http.routers.backend.entrypoints=websecure"
-        - "traefik.http.routers.backend.tls=true"
+        - "traefik.http.routers.backend.tls.certresolver=le"
+        - "traefik.http.routers.backend.middlewares=backend-stripprefix"
+        - "traefik.http.middlewares.backend-stripprefix.stripprefix.prefixes=/api"
         - "traefik.http.routers.backend.priority=100"
-
-        # Service reference - try different formats
-        - "traefik.http.services.backend.loadbalancer.server.service=unmute_backend"
         - "traefik.http.services.backend.loadbalancer.server.port=8000"
 
-        # WebSocket routing (separate router to avoid conflicts)
-        - "traefik.http.routers.ws.rule=Host(\`inti.intellipedia.ai\`) && Path(\`/v1/realtime\`)"
+        # WebSocket routing - handles /v1/realtime
+        - "traefik.http.routers.ws.rule=Host(`inti.intellipedia.ai`) && Path(`/v1/realtime`)"
         - "traefik.http.routers.ws.entrypoints=websecure"
-        - "traefik.http.routers.ws.tls=true"
+        - "traefik.http.routers.ws.tls.certresolver=le"
         - "traefik.http.routers.ws.priority=110"
-        - "traefik.http.services.ws.loadbalancer.server.service=unmute_backend"
         - "traefik.http.services.ws.loadbalancer.server.port=8000"
     networks:
       - unmute-net
@@ -63,32 +64,48 @@ services:
         order: start-first
       labels:
         - "traefik.enable=true"
-        - "traefik.http.routers.frontend.rule=Host(\`inti.intellipedia.ai\`) && !PathPrefix(\`/api\`)"
+        - "traefik.http.routers.frontend.rule=Host(`inti.intellipedia.ai`) && !PathPrefix(`/api`)"
         - "traefik.http.routers.frontend.entrypoints=websecure"
-        - "traefik.http.routers.frontend.tls=true"
+        - "traefik.http.routers.frontend.tls.certresolver=le"
         - "traefik.http.services.frontend.loadbalancer.server.port=3000"
         - "traefik.http.routers.frontend.priority=50"
     networks:
       - unmute-net
 
-  # Traefik Service with Pipecat-Specific Configuration
+  # Traefik Service with TLS-ALPN Challenge (Working Configuration)
   traefik:
     image: traefik:v3.3.1
     command:
-      - "--configFile=/etc/traefik/traefik-pipecat.yml"
+      - "--providers.swarm.endpoint=unix:///var/run/docker.sock"
+      - "--providers.swarm.exposedByDefault=false"
+      - "--entrypoints.web.address=:80"
+      - "--entrypoints.web.http.redirections.entrypoint.to=websecure"
+      - "--entrypoints.web.http.redirections.entrypoint.scheme=https"
+      - "--entrypoints.websecure.address=:443"
+      - "--certificatesresolvers.le.acme.tlschallenge=true"
+      - "--certificatesresolvers.le.acme.email=steve@intellipedia.ai"
+      - "--certificatesresolvers.le.acme.storage=/letsencrypt/acme.json"
+      - "--api.dashboard=true"
+      - "--api.insecure=false"
+      - "--metrics.prometheus=true"
+      - "--log.level=INFO"
+      - "--ping=true"
+    healthcheck:
+      test: ["CMD", "traefik", "healthcheck", "--ping"]
     ports:
       - "80:80"
       - "443:443"
     volumes:
-      - /root/traefik-static.yml:/etc/traefik/traefik-static.yml:ro
-      - /root/traefik-dynamic.yml:/etc/traefik/dynamic.yml:ro
-      - /root/certs:/etc/certs:ro
+      - traefik-cert:/letsencrypt
       - /var/run/docker.sock:/var/run/docker.sock:ro
+    dns:
+      - 1.1.1.1
+      - 8.8.8.8
     deploy:
+      update_config:
+        order: start-first
       placement:
         constraints:
           - node.role == manager
-      update_config:
-        order: stop-first
     networks:
       - unmute-net

@@ -1,0 +1,13 @@
+# Dynamic configuration for Pipecat Traefik
+# This file can be used for runtime configuration if needed
+
+# Example middlewares (uncomment if needed)
+# http:
+#   middlewares:
+#     pipecat-strip:
+#       stripPrefix:
+#         prefixes:
+#           - "/api"
+#     pipecat-ws:
+#       replacePath:
+#         path: "/ws"

@@ -14,7 +14,7 @@ volumes:
 services:
   # Pipecat Backend Service with Fixed Routing
   backend:
-    image: intellipedia/inti-pipecat-backend:dev.8
+    image: intellipedia/inti-pipecat-backend:dev.10
     environment:
       - GROQ_API_KEY=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
       - INTI_GROQ_LLM_MODEL=openai/gpt-oss-20b

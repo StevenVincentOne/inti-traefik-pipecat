@@ -38,14 +38,16 @@ services:
         - "traefik.http.routers.backend.middlewares=backend-stripprefix"
         - "traefik.http.middlewares.backend-stripprefix.stripprefix.prefixes=/api"
         - "traefik.http.routers.backend.priority=100"
-        - "traefik.http.services.backend.loadbalancer.server.port=80"
+        - "traefik.http.routers.backend.service=pipecat-backend"
 
         # WebSocket routing - handles /v1/realtime
         - "traefik.http.routers.ws.rule=Host(`inti.intellipedia.ai`) && Path(`/v1/realtime`)"
         - "traefik.http.routers.ws.entrypoints=websecure"
         - "traefik.http.routers.ws.tls.certresolver=le"
         - "traefik.http.routers.ws.priority=110"
-        - "traefik.http.services.ws.loadbalancer.server.port=80"
+        - "traefik.http.routers.ws.service=pipecat-backend"
+
+        - "traefik.http.services.pipecat-backend.loadbalancer.server.port=80"
     networks:
       - unmute-net
 
